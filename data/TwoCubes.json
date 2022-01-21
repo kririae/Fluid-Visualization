@@ -1,0 +1,25 @@
+{
+  "UI": {
+    "width": 1280,
+    "height": 720
+  },
+  "Solver": {
+    "type": 1,
+    "border": 60.0,
+    "radius": 3
+  },
+  "Objects": [
+    {
+      "type": 0,
+      "coeff": 0.4,
+      "sideLength": [30, 30, 30],
+      "center": [30, -40, 30]
+    },
+    {
+      "type": 0,
+      "coeff": 0.4,
+      "sideLength": [30, 30, 30],
+      "center": [-30, -40, -30]
+    }
+  ]
+}
