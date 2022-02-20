@@ -7,7 +7,7 @@
 #include <random>
 #include <set>
 
-constexpr int NParticles = 2000;
+constexpr int NParticles = 5000;
 
 TEST(NSearch, main)
 {

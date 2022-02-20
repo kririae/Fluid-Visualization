@@ -14,12 +14,15 @@
 typedef unsigned int uint;
 typedef unsigned long ulong;
 
+using std::vector;
+
 NSearch::NSearch(float _border, float _radius)
     : radius(_radius), radius2(radius * radius), border(_border),
       n_grids(int(glm::ceil(2 * _border / radius) + 1))
 {
   // Initialize to index sort
-  hashMap = std::vector<std::vector<int> >(n_grids * n_grids * n_grids);
+  // hashMap = vector<vector<int> >(n_grids * n_grids * n_grids);
+  hashMap = vector<vector<int>>(n_grids * n_grids * n_grids);
 }
 
 void
@@ -55,7 +58,7 @@ NSearch::neighbor(uint index, uint neighbor_index) const
 void
 NSearch::build()
 {
-  neighborMap = std::vector<std::vector<uint> >(nPoints());
+  neighborMap = vector<vector<uint> >(nPoints());
 
   auto data = *buffer;
   const int dataSize = int(data.size());
@@ -83,7 +86,7 @@ NSearch::build()
             continue;
 
           const int _hash_index = hashFromGrid(u, v, w);
-          const std::vector<int> &map_item = hashMap[_hash_index];
+          const vector<int> &map_item = hashMap[_hash_index];
           std::for_each(map_item.cbegin(), map_item.cend(), [&](int j) {
             if (i != j && center.dist2(data[j]) <= radius2 &&
                 neighborMap[i].size() <= ulong(MAX_NEIGHBOR_SIZE))
@@ -129,7 +132,7 @@ NSearch::hashFromGrid(const ivec3 &p) const
   return hashFromGrid(p.x, p.y, p.z);
 }
 
-std::vector<uint> &
+vector<uint> &
 NSearch::neighborVec(uint index)
 {
   // NOT APPRECIATED
