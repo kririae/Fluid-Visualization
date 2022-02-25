@@ -4,9 +4,8 @@ The code compilation is only tested on `Arch Linux x86_64`, Linux kernel `5.15.1
 
 Build with
 ```bash
-mkdir build
 cmake -G Ninja -B ./build
-cmake --build ./build -j
+cmake --build ./build -j12
 ```
 
 The binaries are in `build/bin`.

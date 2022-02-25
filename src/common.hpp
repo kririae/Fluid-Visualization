@@ -19,7 +19,7 @@
 using color = glm::vec3;
 using vec3 = glm::vec3;
 using ivec3 = glm::ivec3;
-#ifdef COMPILE_ON_WINDOWS
+#ifdef _WIN32
 using uint = glm::uint;
 using ulong = long;
 #endif

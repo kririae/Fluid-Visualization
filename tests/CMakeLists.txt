@@ -1,5 +1,3 @@
-include("${PROJECT_SOURCE_DIR}/etc/Ext_GTest.cmake")
-
 include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${PROJECT_SOURCE_DIR}/libs/include")
 

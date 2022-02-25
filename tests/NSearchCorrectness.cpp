@@ -17,7 +17,7 @@ TEST(NSearch, main)
   std::mt19937 mt(rd());
   std::uniform_real_distribution<float> dist(-border, border);
 
-  NSearchExt nsearch(border, radius);
+  NSearch nsearch(border, radius);
   auto buffer = makePBuffer();
   for (int i = 0; i < NParticles; ++i)
     buffer->push_back(SPHParticle(dist(mt), dist(mt), dist(mt)));
