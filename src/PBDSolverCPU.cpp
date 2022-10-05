@@ -8,16 +8,17 @@
 #include "common.hpp"
 
 #include <chrono>
+#include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 
 PBDSolver::PBDSolver(float _border, float _radius, float _epsilon)
     : Solver(_border, _radius, _epsilon)
 {
   // Do nothing
   buffer = makePBuffer();
-  nsearch = makeNSearch(border, radius);
-  // nsearch = makeNSearchExt(border, radius);
-  // mass = 4.0f / 3.0f * glm::pi<float>() * radius2 * radius;
-  mass = 2.0f;
+  // nsearch = makeNSearch(border, radius);
+  nsearch = makeNSearchExt(border, radius);
+  mass = 1.0f;
 }
 
 void
@@ -62,50 +63,68 @@ PBDSolver::subStep()
   double rhoSum = 0;
   long long nNeighborSum = 0;
 
-  std::vector<float> _lambda(dataSize), c_i(dataSize);
-  std::vector<vec3> XSPHViscosity(dataSize);
+  static constexpr std::size_t padding = 1;
+  std::vector<float> _lambda(dataSize * padding), c_i(dataSize * padding);
+  std::vector<vec3> XSPHViscosity(dataSize * padding);
 
   int iter_cnt = iter;
   while (iter_cnt--) {
-#pragma omp parallel for default(none) \
-    shared(dataSize, c_i, rhoSum, nNeighborSum, _lambda)
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < dataSize; ++i) {
-      // Basic calculation
-      const float rho = sphCalcRho(i);
-      c_i[i] = rho / rho_0 - 1;
-      rhoSum += rho;
+      // INPUT
+      float density = 0.0, denominator = 0.0;
+      int nNeighbor = nsearch->nNeighbor(i);
+      vec3 localPosition = data[i].pos, c_ii = glm::zero<vec3>();
 
-      float _denom = 0.0f;
-      const int nNeighbor = nsearch->nNeighbor(i);
-      nNeighborSum += nNeighbor;
+      // First traversal phase
+      for (int j = 0; j < nNeighbor; ++j) {
+        int neighborIndex = nsearch->neighbor(i, j);
+        vec3 neighborPosition = data[neighborIndex].pos;
+        vec3 deltaPosition = localPosition - neighborPosition;
+        density += mass * poly6(glm::length(deltaPosition), radius);
+        c_ii += gradSpiky(deltaPosition, radius);
 
-      for (int j = 0; j < nNeighbor; ++j)
-        _denom += fastPow(glm::length(gradC(i, nsearch->neighbor(i, j))), 2.0f);
+        // if k == j
+        if (neighborIndex != i) {
+          vec3 grad = gradSpiky(deltaPosition, radius);
+          denominator += glm::dot(grad, grad);
+        }
+      }
 
-      _lambda[i] = -c_i[i] / (_denom + denominatorEpsilon);
+      denominator += glm::dot(c_ii, c_ii);
+      denominator /= (rho_0 * rho_0);
+
+      // OUTPUT
+      c_i[i * padding] = density / rho_0 - 1;
+      _lambda[i * padding] =
+          -c_i[i * padding] / (denominator + denominatorEpsilon);
     }
 
-#pragma omp parallel for default(none) \
-    shared(dataSize, _lambda, data, c_i, XSPHViscosity)
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < dataSize; ++i) {
-      vec3 delta_p_i(0.0f), v_xsph(0.0f);
+      vec3 deltaP(0.0f), vXSPH(0.0f);
+      vec3 localPosition = data[i].pos;
+      vec3 localVelocity = data[i].v;
 
       const int nNeighbor = nsearch->nNeighbor(i);
       for (int j = 0; j < nNeighbor; ++j) {
-        int neighbor_index = nsearch->neighbor(i, j);
+        int neighborIndex = nsearch->neighbor(i, j);
+        vec3 neighborPosition = data[neighborIndex].pos;
+        vec3 neighborVelocity = data[neighborIndex].v;
+        vec3 deltaPosition = localPosition - neighborPosition;
 
-        float r = glm::length(data[i].pos - data[neighbor_index].pos);
-        delta_p_i += (_lambda[i] + _lambda[neighbor_index] +
-                      computeSCorr(i, neighbor_index)) *
-                     gradSpiky(data[i].pos - data[neighbor_index].pos, radius);
-        v_xsph += viscosityCoefficient * (data[neighbor_index].v - data[i].v) *
-                  poly6(r, radius);
+        float r = glm::length(deltaPosition);
+        deltaP += (_lambda[i * padding] + _lambda[neighborIndex * padding] +
+                   computeSCorr(localPosition, neighborPosition)) *
+                  gradSpiky(deltaPosition, radius);
+        vXSPH += viscosityCoefficient * (neighborVelocity - localVelocity) *
+                 poly6(r, radius);
       }
 
-      delta_p_i *= 1.0f / rho_0;
-      data[i].pos += delta_p_i;
-      data[i].rho = glm::clamp((c_i[i] + 1) * rho_0, 0.0f, 1.0f);
-      XSPHViscosity[i] = v_xsph;
+      deltaP *= 1.0f / rho_0;
+      data[i].pos += deltaP;
+      data[i].rho = glm::clamp((c_i[i * padding] + 1) * rho_0, 0.0f, 1.0f);
+      XSPHViscosity[i * padding] = vXSPH;
 
       constraintToBorder(data[i]);
     }
@@ -114,7 +133,8 @@ PBDSolver::subStep()
   // update all velocity
   for (int i = 0; i < dataSize; ++i) {
     auto &p = data[i];
-    p.v = 1.0f / delta_t * (p.pos - pre_data[i].pos) + XSPHViscosity[i];
+    p.v =
+        1.0f / delta_t * (p.pos - pre_data[i].pos) + XSPHViscosity[i * padding];
   }
 
   // Logging part
@@ -136,73 +156,49 @@ PBDSolver::subStep()
 }
 
 float
-PBDSolver::sphCalcRho(int p_i)
-{
-  float rho = 0;
-  const auto &data = *buffer;
-  for (int i = 0; i < nsearch->nNeighbor(p_i); ++i) {
-    const int neighbor_index = nsearch->neighbor(p_i, i);
-    rho += mass *
-           poly6(glm::length(data[p_i].pos - data[neighbor_index].pos), radius);
-  }
-
-  return rho;
-}
-
-vec3
-PBDSolver::gradC(int p_i, int p_k)
-{
-  const auto &data = *buffer;
-  vec3 res(0.0f);
-  if (p_i == p_k) {
-    for (int i = 0; i < nsearch->nNeighbor(p_i); ++i) {
-      const int neighbor_index = nsearch->neighbor(p_i, i);
-      res += gradSpiky(data[p_i].pos - data[neighbor_index].pos, radius);
-    }
-  } else {
-    res = -gradSpiky(data[p_i].pos - data[p_k].pos, radius);
-  }
-
-  return 1.0f / rho_0 * res;
-}
-
-float
 PBDSolver::poly6(float r, float d) noexcept
 {
-  r = glm::clamp(glm::abs(r), 0.0f, d);
-  const float t = (d * d - r * r) / (d * d * d);
-  return 315.0f / (64 * glm::pi<float>()) * t * t * t;
+  // r = glm::clamp(glm::abs(r), 0.0f, d);
+  if (0 <= r && r < d) {
+    const float t = (d * d - r * r) / (d * d * d);
+    return 315.0f / (64 * glm::pi<float>()) * t * t * t;
+  } else {
+    return 0.0f;
+  }
 }
 
 vec3
 PBDSolver::gradSpiky(vec3 v, float d) noexcept
 {
   float len = glm::length(v);
-  vec3 res(0.0f);
-  if (0 < len && len <= d)
-    res =
-        float(-45 / (glm::pi<float>() * fastPow(d, 6)) * fastPow(d - len, 2)) *
-        v / len;
-  return res;
+  if (0 < len && len < d) {
+    return float(-45.0 / (glm::pi<float>() * fastPow(d, 6)) *
+                 fastPow(d - len, 2)) *
+           v / len;
+  } else {
+    return glm::zero<vec3>();
+  }
 }
 
 inline float
-PBDSolver::computeSCorr(int p_i, int p_j)
+PBDSolver::computeSCorr(vec3 p_i, vec3 p_j)
 {
-  float k = 0.1f;
-  float n = 4.0f;
-  float delta_q = 0.3f * radius;
-  const auto &data = *buffer;
-  float r = glm::length(data[p_i].pos - data[p_j].pos);
+  float k = 0.001f;
+  float n = 2.0f;
+  float delta_q = 0.4f * radius;
+  float r = glm::length(p_i - p_j);
   return -k * fastPow(poly6(r, radius) / poly6(delta_q, radius), n);
 }
 
 void
 PBDSolver::constraintToBorder(SPHParticle &p)
 {
-  p.pos.x = glm::clamp(p.pos.x, -border * 0.99f, border * 0.99f);
-  p.pos.y = glm::clamp(p.pos.y, -border * 0.99f, border * 0.99f);
-  p.pos.z = glm::clamp(p.pos.z, -border * 0.99f, border * 0.99f);
+  p.pos.x = glm::clamp(p.pos.x, -border * 0.9f, border * 0.9f);
+  p.pos.y = glm::clamp(p.pos.y, -border * 0.9f, border * 0.9f);
+  p.pos.z = glm::clamp(p.pos.z, -border * 0.9f, border * 0.9f);
+  if (p.pos.x == -border * 0.9f || p.pos.x == border * 0.9f) p.v.x = 0.0;
+  if (p.pos.y == -border * 0.9f || p.pos.y == border * 0.9f) p.v.y = 0.0;
+  if (p.pos.z == -border * 0.9f || p.pos.z == border * 0.9f) p.v.z = 0.0;
 }
 
 std::shared_ptr<Solver>

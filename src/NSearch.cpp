@@ -6,8 +6,8 @@
 #include "common.hpp"
 
 #include <algorithm>
-#include <iostream>
 #include <array>
+#include <iostream>
 // #include <parallel/algorithm>
 #include <utility>
 
@@ -22,7 +22,7 @@ NSearch::NSearch(float _border, float _radius)
 {
   // Initialize to index sort
   // hashMap = vector<vector<int> >(n_grids * n_grids * n_grids);
-  hashMap = vector<vector<int>>(n_grids * n_grids * n_grids);
+  hashMap = vector<vector<int> >(n_grids * n_grids * n_grids);
 }
 
 void
@@ -167,13 +167,13 @@ NSearchExt::setBuffer(PBuffer buffer)
     pointSetID =
         nsearch.add_point_set(positions.front().data(), positions.size());
   } else {
-    if (bufferSize != positions.size())
-      positions.resize(bufferSize);
+    if (bufferSize != positions.size()) positions.resize(bufferSize);
 
     for (int i = 0; i < bufferSize; ++i) {
       const auto element = (*buffer)[i];
-      positions[i] = std::array<CompactNSearch::Real, 3>{
-        element.pos.x, element.pos.y, element.pos.z };
+      positions[i] =
+          std::array<CompactNSearch::Real, 3>{ element.pos.x, element.pos.y,
+                                               element.pos.z };
     }
 
     nsearch.resize_point_set(pointSetID, positions.front().data(), bufferSize);

@@ -24,25 +24,23 @@ protected:
   PBuffer buffer;
   std::shared_ptr<NSearch> nsearch;
 
-  float rho_0 = 1.3f;
+  float rho_0 = 1057.434f;
   float denominatorEpsilon = 170.0f;
   float delta_t{ 1 / 60.0f };
 
   // Mostly from 0 to 1
-  float viscosityCoefficient = 0.001f;
+  float viscosityCoefficient = 0.0001f;
 
-  float mass = 0.0f;
-  int iter = 10;
+  float mass;
+  int iter = 2;
   vec3 extF = vec3(0.0f, -9.8f, 0.0f);
 
   void constraintToBorder(SPHParticle &p);
 
   // PBF mathematics
-  float sphCalcRho(int p_i);
-  vec3 gradC(int p_i, int p_k);
   static float poly6(float r, float d) noexcept;
   static vec3 gradSpiky(vec3 v, float d) noexcept;
-  inline float computeSCorr(int p_i, int p_j);
+  inline float computeSCorr(vec3 p_i, vec3 p_j);
 };
 
 std::shared_ptr<Solver> makePBDSolver(float border, float radius,

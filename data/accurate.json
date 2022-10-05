@@ -5,15 +5,15 @@
   },
   "Solver": {
     "type": 1,
-    "border": 60,
-    "radius": 2
+    "border": 2,
+    "radius": 0.196
   },
   "Objects": [
     {
       "type": 0,
       "coeff": 0.5,
-      "sideLength": [60, 60, 5],
-      "center": [0, 0, -57.4]
+      "sideLength": [1.0, 1.0, 1.0],
+      "center": [0.5, 0.5, 0.5]
     }
   ]
 }
